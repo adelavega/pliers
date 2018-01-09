@@ -57,15 +57,18 @@ def check_updates(transformers, datastore=None, stimuli=None):
             if trans._stim_matches_input_types(stim):
                 res = trans.transform(stim)
 
-                try: # Add iterable
-                    res = [res.data for r in res]
-                except TypeError:
-                    res = res.data
+                if res.data:
+                    try: # Add iterable
+                        values = [res.data for r in res]
+                    except TypeError:
+                        values = res.data
 
-                res = hash_data(res) if isinstance(trans, (Converter, Filter)) \
-                      else res[0][0]
+                    values = hash_data(values) if isinstance(trans, (Converter, Filter)) \
+                          else values[0][0]
+                else:
+                    res = "n/a"
 
-                results["{}.{}".format(trans.__hash__(), stim.name)] = [res]
+                results["{}.{}".format(trans.__hash__(), stim.name)] = [values]
 
     # Check for mistmatches
     mismatches = []
