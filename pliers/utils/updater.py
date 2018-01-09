@@ -57,7 +57,7 @@ def check_updates(transformers, datastore=None, stimuli=None):
             if trans._stim_matches_input_types(stim):
                 res = trans.transform(stim)
 
-                if res.data:
+                if res.data and res.data[0]:
                     try: # Add iterable
                         values = [res.data for r in res]
                     except TypeError:
