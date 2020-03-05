@@ -178,12 +178,12 @@ class LibrosaFeatureExtractor(AudioExtractor, metaclass=ABCMeta):
         elif self._feature == 'tonnetz':
             return getattr(librosa.feature, self._feature)(
                 y=stim.data, sr=stim.sampling_rate, **self.librosa_kwargs)
-            
+
         elif self._feature in[ 'onset_detect', 'onset_strength_multi']:
             return getattr(librosa.onset, self._feature)(
                 y=stim.data, sr=stim.sampling_rate, hop_length=self.hop_length,
                 **self.librosa_kwargs)
-            
+
         elif self._feature in[ 'tempo', 'beat_track']:
             return getattr(librosa.beat, self._feature)(
                 y=stim.data, sr=stim.sampling_rate, hop_length=self.hop_length,
@@ -199,7 +199,7 @@ class LibrosaFeatureExtractor(AudioExtractor, metaclass=ABCMeta):
                 **self.librosa_kwargs)
 
     def _extract(self, stim):
-        
+
         values = self._get_values(stim)
 
         if self._feature=='beat_track':
@@ -214,11 +214,11 @@ class LibrosaFeatureExtractor(AudioExtractor, metaclass=ABCMeta):
         onsets = librosa.frames_to_time(range(n_frames),
                                         sr=stim.sampling_rate,
                                         hop_length=self.hop_length)
-        
+
         onsets = onsets + stim.onset if stim.onset else onsets
-        
+
         durations = [self.hop_length / float(stim.sampling_rate)] * n_frames
-           
+
         return ExtractorResult(values, stim, self, features=feature_names,
                                onsets=onsets, durations=durations,
                                orders=list(range(n_frames)))
@@ -356,7 +356,7 @@ class OnsetStrengthMultiExtractor(LibrosaFeatureExtractor):
     https://librosa.github.io/librosa/feature.html.'''
 
     _feature = 'onset_strength_multi'
-   
+
 
 class ZeroCrossingRateExtractor(LibrosaFeatureExtractor):
 
@@ -513,19 +513,19 @@ class AudiosetLabelExtractor(AudioExtractor):
 
     ''' Extract probability of 521 audio event classes based on AudioSet
     corpus using a YAMNet architecture. Code available at:
-    https://github.com/tensorflow/models/tree/master/research/audioset/yamnet 
+    https://github.com/tensorflow/models/tree/master/research/audioset/yamnet
 
     Args:
-    hop_size (float): size of the audio segment (in seconds) on which label 
+    hop_size (float): size of the audio segment (in seconds) on which label
         extraction is performed.
-    top_n (int): specifies how many of the highest label probabilities are 
+    top_n (int): specifies how many of the highest label probabilities are
         returned. If not defined, returns probabilities for all 521 labels.
-    label_subset (list): specifies subset of labels for which probabilities 
+    label_subset (list): specifies subset of labels for which probabilities
         are to be returned. A comprehensive list of labels is available in the
         audioset/yamnet repository (see yamnet_class_map.csv).
     weights_path (optional): full path to model weights file. If not provided,
         weights from pretrained YAMNet module are used.
-    yamnet_kwargs (optional): Optional named arguments that modify input 
+    yamnet_kwargs (optional): Optional named arguments that modify input
         parameters for the model (see params.py file in yamnet repository)
     '''
 
@@ -536,7 +536,7 @@ class AudiosetLabelExtractor(AudioExtractor):
                  weights_path=None, **yamnet_kwargs):
         try:
             verify_dependencies(['yamnet'])
-        except MissingDependencyError: 
+        except MissingDependencyError:
             raise MissingDependencyError(dependencies=None,
                                          custom_message=YAMNET_INSTALL_MESSAGE)
         verify_dependencies(['tensorflow'])
@@ -557,7 +557,7 @@ class AudiosetLabelExtractor(AudioExtractor):
         if self.label_subset:
             for l in self.label_subset:
                 if l not in self.labels:
-                    logging.warning('''Label {} does not exist. 
+                    logging.warning('''Label {} does not exist.
                                      Dropping.'''.format(l))
         super(AudiosetLabelExtractor, self).__init__()
 
@@ -570,20 +570,20 @@ class AudiosetLabelExtractor(AudioExtractor):
                 logging.warning(
                     'The sampling rate of the stimulus is '
                     f'{params.SAMPLE_RATE}Hz. '
-                    'YAMNet was trained on audio sampled at 16000Hz. ' 
-                    'This should not impact predictions, but you can resample ' 
-                    'the input using AudioResamplingFilter for full conformity ' 
+                    'YAMNet was trained on audio sampled at 16000Hz. '
+                    'This should not impact predictions, but you can resample '
+                    'the input using AudioResamplingFilter for full conformity '
                     'to training.')
             if params.MEL_MIN_HZ != 125 or params.MEL_MAX_HZ != 7500:
                 logging.warning(
                     'Custom values for MEL_MIN_HZ and MEL_MAX_HZ '
-                    'were passed. Changing these defaults might affect ' 
+                    'were passed. Changing these defaults might affect '
                     'model performance.')
         else:
             raise ValueError(
                 f'The sampling rate of your stimulus ({params.SAMPLE_RATE}Hz)'
                 ' must be at least twice the value of MEL_MAX_HZ '
-                f'({params.MEL_MAX_HZ}Hz). ' 
+                f'({params.MEL_MAX_HZ}Hz). '
                 'Upsample your audio stimulus (recommended) or pass a lower '
                 'value of MEL_MAX_HZ when initializing this extractor.')
 
@@ -597,7 +597,7 @@ class AudiosetLabelExtractor(AudioExtractor):
             for l in self.label_subset:
                 print(l)
                 print(np.where(labels == l))
-            label_subset_idx = [idx for idx, lab in enumerate(labels) 
+            label_subset_idx = [idx for idx, lab in enumerate(labels)
                                     if lab in self.label_subset]
             preds = preds[:,label_subset_idx]
             labels = self.label_subset
@@ -613,11 +613,12 @@ class AudiosetLabelExtractor(AudioExtractor):
         labels = [labels[i] for i in idx][-nr_lab:][::-1]
 
         durations = params.PATCH_HOP_SECONDS
+        dur = params.PATCH_WINDOW_SECONDS + params.STFT_WINDOW_SECONDS - params.STFT_HOP_SECONDS
         onsets = np.arange(start=0, stop=stim.duration, step=durations)
-        onsets = onsets[onsets + params.PATCH_WINDOW_SECONDS < stim.duration]
+        onsets = onsets[onsets + dur < stim.duration]
 
         return ExtractorResult(preds, stim, self, features=labels,
-                               onsets=onsets, durations=durations,
+                               onsets=onsets, durations=dur,
                                orders=list(range(len(onsets))))
 
 # Add pointer to installation instructions (install models, run test install - link, add to pythonpath)
