@@ -168,12 +168,12 @@ class LibrosaFeatureExtractor(AudioExtractor, metaclass=ABCMeta):
         elif self._feature == 'tonnetz':
             return getattr(librosa.feature, self._feature)(
                 y=stim.data, sr=stim.sampling_rate, **self.librosa_kwargs)
-            
+
         elif self._feature in[ 'onset_detect', 'onset_strength_multi']:
             return getattr(librosa.onset, self._feature)(
                 y=stim.data, sr=stim.sampling_rate, hop_length=self.hop_length,
                 **self.librosa_kwargs)
-            
+
         elif self._feature in[ 'tempo', 'beat_track']:
             return getattr(librosa.beat, self._feature)(
                 y=stim.data, sr=stim.sampling_rate, hop_length=self.hop_length,
@@ -189,7 +189,7 @@ class LibrosaFeatureExtractor(AudioExtractor, metaclass=ABCMeta):
                 **self.librosa_kwargs)
 
     def _extract(self, stim):
-        
+
         values = self._get_values(stim)
 
         if self._feature=='beat_track':
@@ -204,11 +204,11 @@ class LibrosaFeatureExtractor(AudioExtractor, metaclass=ABCMeta):
         onsets = librosa.frames_to_time(range(n_frames),
                                         sr=stim.sampling_rate,
                                         hop_length=self.hop_length)
-        
+
         onsets = onsets + stim.onset if stim.onset else onsets
-        
+
         durations = [self.hop_length / float(stim.sampling_rate)] * n_frames
-           
+
         return ExtractorResult(values, stim, self, features=feature_names,
                                onsets=onsets, durations=durations,
                                orders=list(range(n_frames)))
@@ -346,7 +346,7 @@ class OnsetStrengthMultiExtractor(LibrosaFeatureExtractor):
     https://librosa.github.io/librosa/feature.html.'''
 
     _feature = 'onset_strength_multi'
-   
+
 
 class ZeroCrossingRateExtractor(LibrosaFeatureExtractor):
 
@@ -500,24 +500,24 @@ class PercussiveExtractor(LibrosaFeatureExtractor):
 
 
 class AudiosetLabelExtractor(AudioExtractor):
-    
+
     ''' Extract probability of 521 audio event classes based on AudioSet
     corpus using a YAMNet architecture. Code available at:
-    https://github.com/tensorflow/models/tree/master/research/audioset/yamnet 
+    https://github.com/tensorflow/models/tree/master/research/audioset/yamnet
 
     Args:
-    hop_size (float): size of the audio segment (in seconds) on which label 
+    hop_size (float): size of the audio segment (in seconds) on which label
         extraction is performed.
-    top_n (int): specifies how many of the highest label probabilities are 
+    top_n (int): specifies how many of the highest label probabilities are
         returned. If None, all labels (or all in labels) are returned.
         Top_n and labels are mutually exclusive arguments.
-    labels (list): specifies subset of labels for which probabilities 
+    labels (list): specifies subset of labels for which probabilities
         are to be returned. If None, all labels (or top_n) are returned.
-        The full list of labels is available in the audioset/yamnet 
+        The full list of labels is available in the audioset/yamnet
         repository (see yamnet_class_map.csv).
     weights_path (optional): full path to model weights file. If not provided,
         weights from pretrained YAMNet module are used.
-    yamnet_kwargs (optional): Optional named arguments that modify input 
+    yamnet_kwargs (optional): Optional named arguments that modify input
         parameters for the model (see params.py file in yamnet repository)
     '''
 
@@ -532,7 +532,7 @@ class AudiosetLabelExtractor(AudioExtractor):
             sys.path.insert(0, str(yamnet_path))
             self.yamnet = attempt_to_import('yamnet')
             verify_dependencies(['yamnet'])
-        except MissingDependencyError: 
+        except MissingDependencyError:
             msg = ('Yamnet could not be imported. To download and set up '
                   'yamnet, run:\n\tpython -m pliers.support.setup_yamnet')
             raise MissingDependencyError(dependencies=None,
@@ -566,7 +566,7 @@ class AudiosetLabelExtractor(AudioExtractor):
             if missing:
                 logging.warning(f'Labels {missing} do not exist. Dropping.')
             self.labels = labels
-            self.label_idx = [i for i, l in enumerate(all_labels) 
+            self.label_idx = [i for i, l in enumerate(all_labels)
                               if l in labels]
         else:
             self.labels = all_labels
@@ -583,7 +583,7 @@ class AudiosetLabelExtractor(AudioExtractor):
                     f'{self.params.SAMPLE_RATE}Hz. YAMNet was trained on '
                     ' audio sampled at 16000Hz. This should not impact '
                     'predictions, but you can resample the input using '
-                    'AudioResamplingFilter for full conformity ' 
+                    'AudioResamplingFilter for full conformity '
                     'to training.')
             if self.params.MEL_MIN_HZ != 125 or self.params.MEL_MAX_HZ != 7500:
                 logging.warning(
@@ -602,7 +602,7 @@ class AudiosetLabelExtractor(AudioExtractor):
         model.load_weights(self.weights_path)
         preds, _ = model.predict_on_batch(np.reshape(stim.data, [1,-1]))
         preds = preds.numpy()[:,self.label_idx]
-        
+
         nr_lab = self.top_n or len(self.labels)
         idx = np.mean(preds,axis=0).argsort()
         preds = np.fliplr(preds[:,idx][:,-nr_lab:])
@@ -618,3 +618,21 @@ class AudiosetLabelExtractor(AudioExtractor):
         return ExtractorResult(preds, stim, self, features=labels,
                                onsets=onsets, durations=[dur]*len(onsets),
                                orders=list(range(len(onsets))))
+
+
+from scipy.stats import entropy
+
+class ProbabilityEntropyMixin:
+    def _extract(self, *args, **kwargs):
+        result = super()._extract(*args, **kwargs)
+        df = result.to_df()
+        entropy_er = df.apply(lambda x: entropy(x[result.features]), axis=1)
+        return ExtractorResult(
+            entropy_er, result.stim, result.extractor, features=['entropy'],
+            onsets=result.onset, durations=result.duration,
+            orders=result.order)
+
+
+class AudiosetProbabiltyEntropy(ProbabilityEntropyMixin,
+                                AudiosetLabelExtractor):
+    pass
