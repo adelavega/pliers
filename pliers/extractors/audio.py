@@ -387,3 +387,53 @@ class TempogramExtractor(LibrosaFeatureExtractor):
 
     def get_feature_names(self):
         return ['tempo_%d' % i for i in range(self.win_length)]
+
+class TimbrePitchExtractor(AudioExtractor):
+    ''' Extract Timbre and Pitch from Mel-Frequency Ceptral Coefficients.
+
+    Args:
+    n_mfcc (int): specifies the number of MFCC to extract
+    n_coefs(int): cepstrum coefficients to keep in low quefrency spectrum
+    hop_length (int): hop length in number of samples
+    librosa_kwargs (optional): Optional named arguments to pass to librosa
+    '''
+
+    _log_attributes = ('hop_length', 'n_coefs', 'n_mfcc')
+
+    def __init__(self, n_mfcc=48, n_coefs=13, hop_length=1024, **librosa_kwargs):
+        self.n_mfcc = n_mfcc
+        self.n_coefs = n_coefs
+        self.hop_length = hop_length
+        self.librosa_kwargs = librosa_kwargs
+        super().__init__()
+
+    def _extract(self, stim):
+
+        #https://librosa.org/doc/main/generated/librosa.feature.mfcc.html
+        mfccs = librosa.feature.mfcc(y=stim.data, 
+            sr=stim.sampling_rate, 
+            n_mfcc=self.n_mfcc,
+            hop_length=self.hop_length,
+            **self.librosa_kwargs)
+
+        #https://docs.scipy.org/doc/scipy/reference/generated/scipy.fft.dct.html#scipy.fft.dct
+        lq_mfs = fft.dct(np.transpose(mfccs[:self.n_coefs]), 
+            type=2, 
+            n=self.n_mfcc, 
+            axis=- 1, 
+            norm='ortho', 
+            overwrite_x=False)
+        hq_mfs = fft.dct(np.transpose(mfccs[self.n_coefs:]), 
+            type=2, 
+            n=self.n_mfcc, 
+            axis=- 1, 
+            norm='ortho', 
+            overwrite_x=False)
+
+        lq_mfs = 10 ** (lq_mfs / 20.)
+        hq_mfs = 10 ** (hq_mfs / 20.)
+
+        out_val = {'pitch':lq_mfs,'timbre':hq_mfs}
+
+        return ExtractorResult(out_val, stim, self,
+                               features=['pitch','timbre'])
